@@ -1009,7 +1009,7 @@
     <div class="page-transition" id="pageTransition"></div>
 
     <!-- Music Control -->
-    <div class="music-control" id="musicControl" title="Toggle Music">🔇</div>
+    <div class="music-control" id="musicControl" title="Toggle Music">🔊</div>
 
     <!-- Easter Egg -->
     <div class="easter-egg" id="easterEgg">
@@ -1183,56 +1183,38 @@
         ============================================= */
         const CONFIG = {
             // 👤 Change her name here
-            // This will appear on the proposal page
-            herName: "My Love sreshta",
+            herName: "My Love Sreshta!",
             
             // 🔐 Change password here (lowercase, no spaces)
-            // She needs to type this to unlock page 4
             password: "sreshta",
             
             // 📅 Change meeting date here
             // Format: "YYYY-MM-DDTHH:MM:SS"
-            // Example: "2026-12-01T00:00:00" = December 1, 2026 at midnight
-            // Example: "2026-07-14T18:30:00" = July 14, 2026 at 6:30 PM
             meetingDate: "2024-07-14T00:00:00",
             
             // 🎵 Change music URL here
-            // Use a direct link to an MP3 file
-            // Leave empty "" to disable music
-            // Free music sources: https://pixabay.com/music/
+            // Use a direct link to an MP3 file or leave empty "" to disable
             musicUrl: "media/WhatsApp Audio 2026-02-14 at 11.53.16 AM.mpeg"
         };
 
         /* =============================================
            STATE MANAGEMENT SYSTEM
-           Clean single-variable architecture
         ============================================= */
         const State = {
-            // Current active page (0-7)
             currentPage: 0,
-            
-            // User interaction flags
-            userInteracted: false,
             noClickCount: 0,
             easterEggClicks: 0,
             giftRevealed: false,
             correctGift: Math.floor(Math.random() * 4) + 1,
-            
-            // Audio state
             audioPlayer: null,
             isMusicPlaying: false,
-            
-            // Animation intervals (for cleanup)
+            musicInitialized: false,
             intervals: {
                 sparkles: null,
                 countdown: null,
                 fallingHearts: null
             },
-            
-            // Animation frame IDs (for cleanup)
             animationFrames: [],
-            
-            // Timeouts (for cleanup)
             timeouts: []
         };
 
@@ -1267,57 +1249,83 @@
         };
 
         /* =============================================
-           MUSIC SYSTEM (SMOOTH FADE)
-           No autoplay, starts after first touch
+           IMPROVED MUSIC SYSTEM
+           Auto-starts on page load (desktop) or first interaction (mobile)
         ============================================= */
-        function enableMusicAfterTouch() {
-            if (!State.userInteracted && CONFIG.musicUrl) {
-                State.userInteracted = true;
-                initMusic();
+        function initMusic() {
+            if (!CONFIG.musicUrl || State.musicInitialized) return;
+            
+            State.musicInitialized = true;
+            State.audioPlayer = new Audio(CONFIG.musicUrl);
+            State.audioPlayer.loop = true;
+            State.audioPlayer.volume = 0;
+            
+            // Try to play immediately (works on desktop)
+            const playPromise = State.audioPlayer.play();
+            
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        // Success! Fade in the music
+                        fadeVolume(0, 0.15, 1500);
+                        State.isMusicPlaying = true;
+                        updateMusicButton();
+                        console.log('🎵 Music started automatically');
+                    })
+                    .catch((error) => {
+                        // Blocked by browser (mobile) - will start on first interaction
+                        console.log('🎵 Music blocked, will start on first touch');
+                        State.isMusicPlaying = false;
+                        updateMusicButton();
+                    });
             }
         }
 
-        // Listen for first interaction (passive for performance)
-        document.addEventListener('click', enableMusicAfterTouch, { once: true, passive: true });
-        document.addEventListener('touchstart', enableMusicAfterTouch, { once: true, passive: true });
-
-        function initMusic() {
-            if (!CONFIG.musicUrl || State.audioPlayer) return;
-            
-            State.audioPlayer = new Audio(CONFIG.musicUrl);
-            State.audioPlayer.loop = true;
-            State.audioPlayer.volume = 0; // Start at 0 for fade-in
+        // Multiple event listeners to catch ANY user interaction
+        function startMusicOnInteraction() {
+            if (!State.audioPlayer || State.isMusicPlaying) return;
             
             State.audioPlayer.play()
                 .then(() => {
-                    // Smooth fade-in
-                    fadeVolume(0, 0.08, 1000);
+                    fadeVolume(0, 0.15, 1000);
                     State.isMusicPlaying = true;
                     updateMusicButton();
+                    console.log('🎵 Music started on user interaction');
                 })
                 .catch(err => {
-                    console.log('Music blocked:', err);
-                    updateMusicButton();
+                    console.log('Music play failed:', err);
                 });
         }
 
+        // Listen for ANY interaction - passive for performance
+        const interactionEvents = ['click', 'touchstart', 'touchend', 'keydown'];
+        interactionEvents.forEach(eventType => {
+            document.addEventListener(eventType, startMusicOnInteraction, { 
+                once: true, 
+                passive: true 
+            });
+        });
+
         function toggleMusic() {
-            if (!State.audioPlayer && CONFIG.musicUrl) {
+            if (!State.audioPlayer) {
                 initMusic();
-            } else if (State.audioPlayer) {
-                if (State.isMusicPlaying) {
-                    // Fade out then pause
-                    fadeVolume(0.08, 0, 500, () => {
-                        State.audioPlayer.pause();
-                    });
-                    State.isMusicPlaying = false;
-                } else {
-                    State.audioPlayer.play();
-                    fadeVolume(0, 0.08, 500);
-                    State.isMusicPlaying = true;
-                }
-                updateMusicButton();
+                return;
             }
+            
+            if (State.isMusicPlaying) {
+                fadeVolume(0.15, 0, 500, () => {
+                    State.audioPlayer.pause();
+                });
+                State.isMusicPlaying = false;
+            } else {
+                State.audioPlayer.play()
+                    .then(() => {
+                        fadeVolume(0, 0.15, 500);
+                        State.isMusicPlaying = true;
+                    })
+                    .catch(err => console.log('Music play failed:', err));
+            }
+            updateMusicButton();
         }
 
         function fadeVolume(start, end, duration, callback) {
@@ -1353,13 +1361,12 @@
         document.getElementById('musicControl').addEventListener('click', toggleMusic, { passive: true });
 
         /* =============================================
-           SPARKLES SYSTEM (REDUCED DENSITY)
-           Performance optimized with RAF
+           SPARKLES SYSTEM
         ============================================= */
         function createSparkles() {
             const container = document.getElementById('sparkles');
             let sparkleCount = 0;
-            const maxSparkles = 12; // Reduced from 20
+            const maxSparkles = 12;
 
             function addSparkle() {
                 if (sparkleCount >= maxSparkles || document.hidden) return;
@@ -1386,7 +1393,6 @@
 
         /* =============================================
            STICKER PAUSE ON TAB INACTIVE
-           Performance optimization
         ============================================= */
         document.addEventListener('visibilitychange', () => {
             const container = document.getElementById('stickerContainer');
@@ -1399,7 +1405,6 @@
 
         /* =============================================
            LOADING PAGE
-           Smooth text typing with RAF
         ============================================= */
         function startLoading() {
             let currentTextIndex = 0;
@@ -1443,46 +1448,35 @@
         }
 
         /* =============================================
-           PAGE NAVIGATION (STATE-BASED)
-           Clean transition with proper cleanup
+           PAGE NAVIGATION
         ============================================= */
         function goToPage(pageNum) {
-            // Prevent double navigation
             if (State.currentPage === pageNum) return;
             
             const transition = document.getElementById('pageTransition');
             transition.classList.add('active');
 
-            // Clean up all animations
             cleanupAnimations();
 
             State.timeouts.push(setTimeout(() => {
-                // Hide all pages
                 document.querySelectorAll('.page').forEach(page => {
                     page.classList.remove('active', 'final-blur-in');
                 });
                 
-                // Show target page
                 const targetPage = document.getElementById('page' + pageNum);
                 targetPage.classList.add('active');
                 
-                // Special blur effect for final page
                 if (pageNum === 7) {
                     targetPage.classList.add('final-blur-in');
                 }
                 
-                // Update state
                 State.currentPage = pageNum;
-
-                // Scroll to top (smooth)
                 window.scrollTo({ top: 0, behavior: 'smooth' });
 
-                // Remove transition
                 State.timeouts.push(setTimeout(() => {
                     transition.classList.remove('active');
                 }, 300));
 
-                // Page-specific initializations
                 initPage(pageNum);
             }, 400));
         }
@@ -1509,10 +1503,8 @@
 
         /* =============================================
            CLEANUP SYSTEM
-           Prevents memory leaks
         ============================================= */
         function cleanupAnimations() {
-            // Clear all intervals
             Object.keys(State.intervals).forEach(key => {
                 if (State.intervals[key]) {
                     clearInterval(State.intervals[key]);
@@ -1520,31 +1512,24 @@
                 }
             });
 
-            // Clear all timeouts
             State.timeouts.forEach(timeout => clearTimeout(timeout));
             State.timeouts = [];
 
-            // Cancel animation frames
             State.animationFrames.forEach(id => cancelAnimationFrame(id));
             State.animationFrames = [];
 
-            // Remove falling hearts
             document.querySelectorAll('.falling-heart').forEach(el => el.remove());
-            
-            // Remove confetti
             document.querySelectorAll('.confetti').forEach(el => el.remove());
         }
 
         /* =============================================
            PAGE 1: PROPOSAL
-           No layout shift with transform-only scaling
         ============================================= */
         function resetProposalPage() {
             const noBtn = document.getElementById('noBtn');
             const yesBtn = document.getElementById('yesBtn');
             const messageDiv = document.getElementById('funnyMessage');
             
-            // Reset transforms (no layout shift)
             noBtn.style.transform = '';
             yesBtn.style.transform = '';
             yesBtn.disabled = false;
@@ -1563,7 +1548,6 @@
             const messageIndex = Math.min(State.noClickCount - 1, Messages.cute.length - 1);
             messageDiv.textContent = Messages.cute[messageIndex];
 
-            // Transform only (no layout shift)
             const noScale = Math.max(0.5, 1 - State.noClickCount * 0.1);
             const yesScale = 1 + State.noClickCount * 0.12;
             
@@ -1611,7 +1595,6 @@
 
         /* =============================================
            PAGE 3: PASSWORD
-           No keyboard jitter (fixed height)
         ============================================= */
         function handlePasswordEnter(event) {
             if (event.key === 'Enter') {
@@ -1648,10 +1631,8 @@
 
         /* =============================================
            PAGE 4: GIFT SYSTEM
-           Glow pulse + opening animation + confetti
         ============================================= */
         function highlightCorrectGift() {
-            // Highlight correct gift with glow
             if (!State.giftRevealed) {
                 const giftBoxes = document.querySelectorAll('.gift-box');
                 giftBoxes[State.correctGift - 1].classList.add('correct-gift');
@@ -1665,11 +1646,9 @@
             const clickedBox = giftBoxes[giftNumber - 1];
             
             if (giftNumber === State.correctGift) {
-                // Correct gift!
                 clickedBox.classList.add('opening');
                 State.giftRevealed = true;
                 
-                // Create confetti burst
                 createConfetti(clickedBox);
                 
                 State.timeouts.push(setTimeout(() => {
@@ -1677,7 +1656,6 @@
                 }, 600));
                 
             } else {
-                // Wrong gift
                 const message = document.getElementById('wrongGiftMessage');
                 message.textContent = Messages.wrongGift[Math.floor(Math.random() * Messages.wrongGift.length)];
                 openModal('wrongGiftModal');
@@ -1719,7 +1697,6 @@
             State.timeouts.push(setTimeout(() => goToPage(5), 300));
         }
 
-        // Reset gift on page 4 re-entry
         const page4Observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.target.id === 'page4' && mutation.target.classList.contains('active')) {
@@ -1741,10 +1718,8 @@
 
         /* =============================================
            MODAL SYSTEM
-           Prevent stacking, smooth animations
         ============================================= */
         function openModal(modalId) {
-            // Close all modals first
             document.querySelectorAll('.modal').forEach(modal => {
                 modal.classList.remove('active');
             });
@@ -1764,7 +1739,6 @@
 
         /* =============================================
            PAGE 5: CHAT ANIMATION
-           Realistic message timing
         ============================================= */
         function startChatAnimation() {
             const container = document.getElementById('chatContainer');
@@ -1781,10 +1755,8 @@
                     msgDiv.style.animationDelay = '0s';
                     container.appendChild(msgDiv);
                     
-                    // Smooth scroll to bottom
                     container.scrollTop = container.scrollHeight;
                     
-                    // Show button after last message
                     if (index === Messages.chat.length - 1) {
                         State.timeouts.push(setTimeout(() => {
                             finalBtn.style.display = 'inline-block';
@@ -1796,7 +1768,6 @@
 
         /* =============================================
            PAGE 6: COUNTDOWN
-           Tabular numbers, single interval
         ============================================= */
         function startCountdown() {
             if (State.intervals.countdown) {
@@ -1834,7 +1805,6 @@
 
         /* =============================================
            PAGE 7: FALLING HEARTS
-           Performance limited (max 10 at once)
         ============================================= */
         function startFallingHearts() {
             if (State.intervals.fallingHearts) {
@@ -1867,8 +1837,7 @@
         }
 
         /* =============================================
-           SMILE POPUP (HAPTIC-STYLE)
-           Smooth scale animation
+           SMILE POPUP
         ============================================= */
         function showSmilePopup() {
             openModal('smilePopup');
@@ -1889,7 +1858,6 @@
 
         /* =============================================
            EASTER EGG
-           5 clicks on background
         ============================================= */
         let easterEggTimeout = null;
 
@@ -1932,6 +1900,9 @@
            INITIALIZATION
         ============================================= */
         window.addEventListener('DOMContentLoaded', () => {
+            // Initialize music immediately
+            initMusic();
+            
             // Start sparkles
             createSparkles();
             
@@ -1952,22 +1923,11 @@
                 clearInterval(State.intervals.sparkles);
             }
             
-            // Show confirmation if user progressed
             if (State.currentPage > 0) {
                 e.preventDefault();
                 e.returnValue = '';
             }
         });
-
-        /* =============================================
-           PERFORMANCE MONITORING (DEV)
-           Remove in production if needed
-        ============================================= */
-        if (window.location.search.includes('debug')) {
-            console.log('Valentine Website - Debug Mode');
-            console.log('State:', State);
-            console.log('Config:', CONFIG);
-        }
     </script>
 </body>
 </html>
